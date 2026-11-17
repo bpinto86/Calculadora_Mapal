@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Parâmetros de Corte MAPAL", page_icon="⚙️", layout="wide")
 
-html_content = """
+html_content = ""
 <!DOCTYPE html>
 <html lang="pt">
 <head>
