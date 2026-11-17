@@ -3,7 +3,7 @@ import streamlit.components.v1 as components
 
 st.set_page_config(page_title="Parâmetros de Corte MAPAL", page_icon="⚙️", layout="wide")
 
-html_content = ""
+html_content = """
 <!DOCTYPE html>
 <html lang="pt">
 <head>
@@ -96,3 +96,392 @@ html_content = ""
                         <option value="P3.1">P3.1 — Aços para ferramentas (600 N/mm²)</option>
                         <option value="M1.1">M1.1 — Inoxidáveis austeníticos</option>
                         <option value="K1.1">K1.1 — Ferro fundido lamelar GJL</option>
+                    </select>
+                </div>
+
+                <!-- Checkbox regra de liga MAPAL -->
+                <div id="bloco-liga" class="bg-slate-900 p-3 rounded-lg border border-slate-700/80 space-y-1 hidden">
+                    <label class="flex items-start gap-2 cursor-pointer text-xs text-slate-300">
+                        <input type="checkbox" id="liga-check" class="mt-0.5 rounded bg-slate-800 border-slate-600 text-blue-600 focus:ring-0" onchange="atualizarCalculo()">
+                        <span><strong>Soma de elementos de liga > 8%</strong><br><span class="text-[10px] text-amber-400">Regra MAPAL: avança grupo seguinte.</span></span>
+                    </label>
+                </div>
+
+                <!-- Refrigeração -->
+                <div class="space-y-2">
+                    <label class="text-xs font-medium text-slate-300">3. REFRIGERAÇÃO</label>
+                    <div class="grid grid-cols-4 gap-1 bg-slate-900 p-1 rounded-lg border border-slate-700 text-xs text-center font-medium">
+                        <button type="button" onclick="setRefrig('int')" id="ref-int" class="py-2 rounded bg-blue-600 text-white transition">Int</button>
+                        <button type="button" onclick="setRefrig('ext')" id="ref-ext" class="py-2 rounded text-slate-400 hover:text-white transition">Ext</button>
+                        <button type="button" onclick="setRefrig('mql')" id="ref-mql" class="py-2 rounded text-slate-400 hover:text-white transition">MQL</button>
+                        <button type="button" onclick="setRefrig('ar')" id="ref-ar" class="py-2 rounded text-slate-400 hover:text-white transition">Ar</button>
+                    </div>
+                </div>
+
+                <!-- Diâmetro Pretendido -->
+                <div class="space-y-2">
+                    <div class="flex justify-between items-center">
+                        <label class="text-xs font-medium text-slate-300">4. DIÂMETRO (Ø)</label>
+                        <span id="badge-metodo" class="text-[10px] bg-blue-900/60 text-blue-300 px-2 py-0.5 rounded border border-blue-700">Interpolação Linear</span>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <button onclick="ajustarDiametro(-1)" class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-white font-bold">-</button>
+                        <input type="number" id="diametro" value="10.00" step="1" min="4" max="20" class="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-center text-lg font-bold text-white focus:outline-none focus:border-blue-500" oninput="atualizarCalculo()">
+                        <button onclick="ajustarDiametro(1)" class="bg-slate-700 hover:bg-slate-600 px-3 py-2 rounded-lg text-white font-bold">+</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Resultados e Indicadores (Direita) -->
+            <div class="lg:col-span-8 space-y-6">
+                <!-- Grid de Métricas CNC -->
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                        <span class="text-xs text-slate-400" id="lbl-f-unit">Avanço / Dente (fz)</span>
+                        <div class="text-2xl font-bold text-white mt-1" id="res-f">0.1310</div>
+                        <span class="text-[10px] text-blue-400" id="lbl-f-unidade">mm/dente</span>
+                    </div>
+                    <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                        <span class="text-xs text-slate-400">Velocidade de Corte</span>
+                        <div class="text-2xl font-bold text-white mt-1" id="res-vc">360</div>
+                        <span class="text-[10px] text-slate-400">m/min</span>
+                    </div>
+                    <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                        <span class="text-xs text-slate-400">Rotações (Spindle)</span>
+                        <div class="text-2xl font-bold text-white mt-1" id="res-n">11459</div>
+                        <span class="text-[10px] text-slate-400">rpm</span>
+                    </div>
+                    <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                        <span class="text-xs text-slate-400">Avanço de Trabalho</span>
+                        <div class="text-2xl font-bold text-white mt-1" id="res-vf">6006</div>
+                        <span class="text-[10px] text-slate-400">mm/min</span>
+                    </div>
+                </div>
+
+                <!-- Valores auxiliares -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                        <span class="text-xs text-slate-400">Parâmetro A</span>
+                        <div class="font-mono text-lg font-bold text-white mt-1" id="val-a">-</div>
+                    </div>
+                    <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                        <span class="text-xs text-slate-400">Parâmetro B</span>
+                        <div class="font-mono text-lg font-bold text-white mt-1" id="val-b">-</div>
+                    </div>
+                    <div class="bg-slate-800 p-4 rounded-xl border border-slate-700">
+                        <span class="text-xs text-slate-400">Estado do Cálculo</span>
+                        <div class="text-sm font-bold text-emerald-400 mt-1.5" id="val-estado">Ativo</div>
+                    </div>
+                </div>
+
+                <!-- Tabela de Referência e Gráfico -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 space-y-3">
+                        <h3 class="text-xs font-semibold text-slate-400 uppercase">Tabela de Referência SCM942</h3>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left text-xs">
+                                <thead>
+                                    <tr class="border-b border-slate-700 text-slate-400">
+                                        <th class="pb-2">Ø (mm)</th>
+                                        <th class="pb-2" id="th-f-label">fz Cat.</th>
+                                        <th class="pb-2">RPM (n)</th>
+                                        <th class="pb-2">Avanço (v_f)</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tabela-ref" class="divide-y divide-slate-700/50"></tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 space-y-3 flex flex-col justify-between">
+                        <div class="flex justify-between items-center">
+                            <h3 class="text-xs font-semibold text-slate-400 uppercase">Representação Gráfica</h3>
+                            <span class="text-[10px] text-slate-400">SVG Interativo</span>
+                        </div>
+                        <div class="relative w-full h-48 bg-slate-900 rounded-lg border border-slate-700 p-2 flex items-center justify-center">
+                            <svg id="svg-grafico" class="w-full h-full" viewBox="0 0 400 180"></svg>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rodapé -->
+        <footer class="bg-slate-800/80 p-4 rounded-xl border border-slate-700/80 flex justify-between items-center text-xs text-slate-400">
+            <div>Created by <span class="text-white font-semibold">Bruno Pinto</span></div>
+            <div><span>✉️</span> bruno.pinto@alamo-ferramentas.com</div>
+        </footer>
+    </div>
+
+    <script>
+        let modoAtual = 'fresagem';
+        let refrigAtual = 'int';
+
+        const baseDados = {
+            furacao: {
+                scd661: {
+                    diametros: [4.00, 5.50, 7.50, 10.50, 14.50, 20.00],
+                    gruposList: ["P1.1", "P1.2", "P2.1", "P2.2", "P3.1", "M1.1", "K1.1"],
+                    grupos: {
+                        "P1.1": { vc: {int:115, ext:105, mql:105, ar:100}, f: [0.24, 0.30, 0.37, 0.46, 0.56, 0.65] },
+                        "P1.2": { vc: {int:105, ext:85, mql:85, ar:80}, f: [0.30, 0.37, 0.46, 0.58, 0.70, 0.81] },
+                        "P2.1": { vc: {int:115, ext:100, mql:100, ar:90}, f: [0.28, 0.35, 0.44, 0.55, 0.66, 0.77] },
+                        "P2.2": { vc: {int:80, ext:70, mql:70, ar:60}, f: [0.24, 0.29, 0.36, 0.44, 0.53, 0.61] },
+                        "P3.1": { vc: {int:85, ext:75, mql:75, ar:70}, f: [0.25, 0.31, 0.39, 0.49, 0.60, 0.69] },
+                        "M1.1": { vc: {int:55, ext:35, mql:35, ar:30}, f: [0.11, 0.14, 0.18, 0.22, 0.27, 0.31] },
+                        "K1.1": { vc: {int:185, ext:115, mql:140, ar:100}, f: [0.34, 0.43, 0.55, 0.70, 0.85, 1.00] }
+                    }
+                },
+                scd621: {
+                    diametros: [3.00, 4.50, 6.50, 9.50, 14.00, 20.00],
+                    gruposList: ["P1.1", "P1.2", "P2.1", "P2.2", "P3.1", "M1.1", "K1.1"],
+                    grupos: {
+                        "P1.1": { vc: {int:170, ext:155, mql:155, ar:150}, f: [0.13, 0.17, 0.22, 0.29, 0.36, 0.43] },
+                        "P1.2": { vc: {int:155, ext:130, mql:130, ar:120}, f: [0.16, 0.21, 0.28, 0.36, 0.45, 0.54] },
+                        "P2.1": { vc: {int:170, ext:145, mql:145, ar:130}, f: [0.15, 0.20, 0.26, 0.34, 0.43, 0.51] },
+                        "P2.2": { vc: {int:120, ext:100, mql:100, ar:90}, f: [0.13, 0.17, 0.21, 0.27, 0.34, 0.40] },
+                        "P3.1": { vc: {int:130, ext:110, mql:110, ar:100}, f: [0.13, 0.18, 0.23, 0.30, 0.39, 0.46] },
+                        "M1.1": { vc: {int:65, ext:40, mql:40, ar:35}, f: [0.07, 0.09, 0.12, 0.15, 0.19, 0.23] },
+                        "K1.1": { vc: {int:150, ext:105, mql:105, ar:95}, f: [0.14, 0.21, 0.28, 0.38, 0.49, 0.59] }
+                    }
+                }
+            },
+            fresagem: {
+                scm942: {
+                    diametros: [4.00, 5.00, 6.00, 8.00, 10.00, 12.00, 14.00, 16.00, 20.00],
+                    gruposList: ["P1.1", "P1.2", "P2.1", "P2.2", "P3.1", "M1.1", "K1.1"],
+                    grupos: {
+                        "P1.1": {
+                            low: { vc: 405, fz: [0.060, 0.073, 0.085, 0.109, 0.131, 0.152, 0.172, 0.190, 0.222] },
+                            med: { vc: 446, fz: [0.067, 0.081, 0.095, 0.121, 0.146, 0.169, 0.191, 0.211, 0.247] },
+                            high: { vc: 490, fz: [0.077, 0.094, 0.110, 0.140, 0.169, 0.196, 0.221, 0.244, 0.285] }
+                        },
+                        "P1.2": {
+                            low: { vc: 360, fz: [0.072, 0.088, 0.103, 0.132, 0.159, 0.184, 0.207, 0.229, 0.268] },
+                            med: { vc: 396, fz: [0.084, 0.101, 0.119, 0.152, 0.183, 0.212, 0.239, 0.264, 0.309] },
+                            high: { vc: 436, fz: [0.102, 0.124, 0.146, 0.186, 0.224, 0.259, 0.293, 0.324, 0.379] }
+                        },
+                        "P2.1": {
+                            low: { vc: 342, fz: [0.058, 0.070, 0.082, 0.105, 0.127, 0.147, 0.166, 0.183, 0.214] },
+                            med: { vc: 376, fz: [0.064, 0.078, 0.091, 0.117, 0.141, 0.163, 0.184, 0.203, 0.238] },
+                            high: { vc: 414, fz: [0.074, 0.090, 0.106, 0.135, 0.163, 0.189, 0.213, 0.235, 0.275] }
+                        },
+                        "P2.2": {
+                            low: { vc: 288, fz: [0.055, 0.066, 0.078, 0.100, 0.120, 0.139, 0.157, 0.173, 0.203] },
+                            med: { vc: 317, fz: [0.061, 0.074, 0.086, 0.110, 0.133, 0.154, 0.174, 0.192, 0.225] },
+                            high: { vc: 348, fz: [0.070, 0.085, 0.100, 0.128, 0.154, 0.178, 0.201, 0.223, 0.260] }
+                        },
+                        "P3.1": {
+                            low: { vc: 324, fz: [0.059, 0.072, 0.084, 0.107, 0.129, 0.150, 0.169, 0.187, 0.218] },
+                            med: { vc: 356, fz: [0.065, 0.079, 0.093, 0.119, 0.143, 0.166, 0.187, 0.207, 0.242] },
+                            high: { vc: 392, fz: [0.076, 0.092, 0.108, 0.138, 0.166, 0.192, 0.217, 0.240, 0.280] }
+                        },
+                        "M1.1": {
+                            low: { vc: 198, fz: [0.037, 0.045, 0.053, 0.068, 0.082, 0.095, 0.107, 0.118, 0.138] },
+                            med: { vc: 218, fz: [0.049, 0.060, 0.070, 0.089, 0.108, 0.125, 0.142, 0.155, 0.182] },
+                            high: { vc: 240, fz: [0.057, 0.069, 0.081, 0.103, 0.124, 0.144, 0.163, 0.180, 0.210] }
+                        },
+                        "K1.1": {
+                            low: { vc: 418, fz: [0.120, 0.146, 0.171, 0.219, 0.263, 0.305, 0.344, 0.380, 0.445] },
+                            med: { vc: 460, fz: [0.139, 0.169, 0.197, 0.252, 0.304, 0.352, 0.397, 0.439, 0.514] },
+                            high: { vc: 506, fz: [0.170, 0.206, 0.242, 0.309, 0.372, 0.431, 0.487, 0.538, 0.629] }
+                        }
+                    }
+                }
+            }
+        };
+
+        function setModo(modo) {
+            modoAtual = modo;
+            document.getElementById('modo-furacao').className = modo === 'furacao' ? "px-4 py-2 rounded-md bg-blue-600 text-white transition" : "px-4 py-2 rounded-md text-slate-400 hover:text-white transition";
+            document.getElementById('modo-fresagem').className = modo === 'fresagem' ? "px-4 py-2 rounded-md bg-blue-600 text-white transition" : "px-4 py-2 rounded-md text-slate-400 hover:text-white transition";
+            
+            document.getElementById('painel-furacao').classList.toggle('hidden', modo !== 'furacao');
+            document.getElementById('painel-fresagem').classList.toggle('hidden', modo !== 'fresagem');
+            document.getElementById('bloco-liga').classList.toggle('hidden', modo === 'fresagem');
+
+            if(modo === 'fresagem') {
+                document.getElementById('lbl-f-unit').innerText = "Avanço / Dente (fz)";
+                document.getElementById('lbl-f-unidade').innerText = "mm/dente";
+                document.getElementById('th-f-label').innerText = "fz Cat.";
+            } else {
+                document.getElementById('lbl-f-unit').innerText = "Avanço / Rotação";
+                document.getElementById('lbl-f-unidade').innerText = "mm/rot";
+                document.getElementById('th-f-label').innerText = "f Cat.";
+            }
+            atualizarCalculo();
+        }
+
+        function mudarTipologiaFresagem() {
+            const tipo = document.getElementById('fresagem-tipo').value;
+            const containerSub = document.getElementById('sub-trocoidal-container');
+            containerSub.classList.toggle('hidden', tipo !== 'trocoidal');
+            atualizarCalculo();
+        }
+
+        function setRefrig(tipo) {
+            refrigAtual = tipo;
+            ['int', 'ext', 'mql', 'ar'].forEach(t => {
+                const btn = document.getElementById(`ref-${t}`);
+                btn.className = t === tipo ? "py-2 rounded bg-blue-600 text-white transition" : "py-2 rounded text-slate-400 hover:text-white transition";
+            });
+            atualizarCalculo();
+        }
+
+        function ajustarDiametro(val) {
+            const input = document.getElementById('diametro');
+            let atual = parseFloat(input.value) || 0;
+            input.value = Math.max(4, Math.min(20, atual + val)).toFixed(0);
+            atualizarCalculo();
+        }
+
+        function atualizarCalculo() {
+            const diamPrat = parseFloat(document.getElementById('diametro').value) || 10;
+            let grupoKey = document.getElementById('grupo').value;
+            const ligaChecked = document.getElementById('liga-check').checked;
+
+            let toolData, diametros, gruposList, fValores, vc;
+
+            if (modoAtual === 'furacao') {
+                const brocaKey = document.getElementById('broca').value;
+                toolData = baseDados.furacao[brocaKey];
+                diametros = toolData.diametros;
+                gruposList = toolData.gruposList;
+
+                if (ligaChecked) {
+                    let idxG = gruposList.indexOf(grupoKey);
+                    if (idxG !== -1 && idxG < gruposList.length - 1) grupoKey = gruposList[idxG + 1];
+                }
+
+                const gData = toolData.grupos[grupoKey] || toolData.grupos["P1.2"];
+                fValores = gData.f;
+                vc = gData.vc[refrigAtual] || gData.vc['int'];
+            } else {
+                const fresaKey = document.getElementById('fresa-modelo').value;
+                const tipologia = document.getElementById('fresagem-tipo').value;
+                const subtipo = document.getElementById('fresagem-subtipo').value; // low, med, high
+
+                toolData = baseDados.fresagem[fresaKey];
+                diametros = toolData.diametros;
+                gruposList = toolData.gruposList;
+
+                const gData = toolData.grupos[grupoKey] || toolData.grupos["P1.2"];
+                const dynData = gData[subtipo] || gData['low'];
+
+                vc = dynData.vc;
+                fValores = dynData.fz;
+
+                // Fatores de correção para outras tipologias caso selecionadas
+                if (tipologia === 'acabamento_3d') {
+                    fValores = fValores.map(v => v * 0.7);
+                    vc = Math.round(vc * 1.2);
+                } else if (tipologia === 'acabamento_planos') {
+                    fValores = fValores.map(v => v * 0.8);
+                    vc = Math.round(vc * 1.1);
+                }
+            }
+
+            // Interpolação Linear de Avanço (f ou fz)
+            let fCalc = 0, a = 0, b = 0;
+            if (diametros.includes(diamPrat)) {
+                let idx = diametros.indexOf(diamPrat);
+                fCalc = fValores[idx];
+            } else {
+                let seg = false;
+                for (let i = 0; i < diametros.length - 1; i++) {
+                    if (diametros[i] <= diamPrat && diamPrat <= diametros[i+1]) {
+                        let d1 = diametros[i], d2 = diametros[i+1];
+                        let f1 = fValores[i], f2 = fValores[i+1];
+                        b = (f2 - f1) / (d2 - d1);
+                        a = f1 - b * d1;
+                        fCalc = a + b * diamPrat;
+                        seg = true;
+                        break;
+                    }
+                }
+                if (!seg) {
+                    let i = diamPrat < diametros[0] ? 0 : diametros.length - 2;
+                    b = (fValores[i+1] - fValores[i]) / (diametros[i+1] - diametros[i]);
+                    a = fValores[i] - b * diametros[i];
+                    fCalc = a + b * diamPrat;
+                }
+            }
+
+            document.getElementById('val-a').innerText = a ? a.toFixed(4) : "-";
+            document.getElementById('val-b').innerText = b ? b.toFixed(4) : "-";
+
+            const n = (vc * 1000) / (Math.PI * diamPrat);
+            let vf = 0;
+
+            if (modoAtual === 'furacao') {
+                vf = n * fCalc;
+                document.getElementById('res-f').innerText = fCalc.toFixed(4);
+            } else {
+                const z = parseInt(document.getElementById('fresa-z').value) || 4;
+                vf = n * fCalc * z;
+                document.getElementById('res-f').innerText = fCalc.toFixed(4);
+            }
+
+            document.getElementById('res-vc').innerText = vc;
+            document.getElementById('res-n').innerText = n.toFixed(0);
+            document.getElementById('res-vf').innerText = vf.toFixed(0);
+
+            // Tabela
+            const tbody = document.getElementById('tabela-ref');
+            tbody.innerHTML = '';
+            for(let i=0; i<diametros.length; i++) {
+                let d = diametros[i];
+                let fVal = fValores[i];
+                let nRef = (vc * 1000) / (Math.PI * d);
+                let vfRef = modoAtual === 'furacao' ? nRef * fVal : nRef * fVal * (parseInt(document.getElementById('fresa-z').value) || 4);
+                let highlight = diamPrat === d ? 'bg-blue-900/30 text-blue-300 font-semibold' : '';
+                tbody.innerHTML += `<tr class="border-b border-slate-700/50 ${highlight}">
+                    <td class="py-2 px-1">Ø ${d.toFixed(1)}</td>
+                    <td class="py-2 px-1">${fVal.toFixed(3)}</td>
+                    <td class="py-2 px-1">${nRef.toFixed(0)}</td>
+                    <td class="py-2 px-1">${vfRef.toFixed(0)}</td>
+                </tr>`;
+            }
+
+            desenharGrafico(diametros, fValores, diamPrat, fCalc);
+        }
+
+        function desenharGrafico(diametros, valores, diamPrat, fCalc) {
+            const svg = document.getElementById('svg-grafico');
+            const w = 400, h = 180, pad = 30;
+            const minX = diametros[0] - 1, maxX = diametros[diametros.length - 1] + 1;
+            const minY = 0, maxY = Math.max(...valores) * 1.2;
+
+            const sx = d => pad + (d - minX) / (maxX - minX) * (w - 2 * pad);
+            const sy = f => h - pad - (f - minY) / (maxY - minY) * (h - 2 * pad);
+
+            let svgHTML = `<line x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}" stroke="#475569" stroke-width="1" />
+                           <line x1="${pad}" y1="${pad}" x2="${pad}" y2="${h-pad}" stroke="#475569" stroke-width="1" />`;
+
+            let pathD = "";
+            for(let i=0; i<diametros.length; i++) {
+                let cx = sx(diametros[i]), cy = sy(valores[i]);
+                pathD += (i === 0 ? `M ${cx} ${cy}` : ` L ${cx} ${cy}`);
+            }
+            svgHTML += `<path d="${pathD}" fill="none" stroke="#3b82f6" stroke-width="2" />`;
+
+            for(let i=0; i<diametros.length; i++) {
+                svgHTML += `<circle cx="${sx(diametros[i])}" cy="${sy(valores[i])}" r="4" fill="#3b82f6" />`;
+            }
+
+            let px = sx(diamPrat), py = sy(fCalc);
+            svgHTML += `<line x1="${px}" y1="${h-pad}" x2="${px}" y2="${py}" stroke="#f97316" stroke-dasharray="3,3" stroke-width="1.5" />
+                        <line x1="${pad}" y1="${py}" x2="${px}" y2="${py}" stroke="#f97316" stroke-dasharray="3,3" stroke-width="1.5" />
+                        <circle cx="${px}" cy="${py}" r="5" fill="#f97316" />
+                        <text x="${Math.min(px + 8, w - 70)}" y="${Math.max(py - 8, 20)}" fill="#f8fafc" font-size="10" font-weight="bold">Ø${diamPrat.toFixed(1)}</text>`;
+
+            svg.innerHTML = svgHTML;
+        }
+
+        window.onload = atualizarCalculo;
+    </script>
+</body>
+</html>
+"""
+
+components.html(html_content, height=950, scrolling=True)
